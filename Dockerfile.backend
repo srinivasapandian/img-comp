@@ -1,0 +1,31 @@
+# ── Stage 1: build ────────────────────────────────────────────────────────────
+FROM python:3.12-slim AS builder
+
+WORKDIR /app
+COPY backend/requirements.txt .
+
+RUN pip install --upgrade pip \
+ && pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+# ── Stage 2: runtime ──────────────────────────────────────────────────────────
+FROM python:3.12-slim
+
+# Pillow needs libjpeg, libwebp, zlib
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libjpeg62-turbo \
+        libwebp7 \
+        zlib1g \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY --from=builder /install /usr/local
+COPY backend/ .
+
+# Temp directory for session files
+RUN mkdir -p /app/temp && chmod 777 /app/temp
+
+EXPOSE 8000
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", \
+     "--workers", "2", "--proxy-headers", "--forwarded-allow-ips", "*"]

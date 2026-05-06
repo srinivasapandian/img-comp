@@ -1,0 +1,31 @@
+# systemd service for ImagePress static frontend (served via Python http.server)
+# Use this ONLY if you don't have Nginx. Nginx is strongly preferred.
+# ─────────────────────────────────────────────────────────────────────────────
+# Install:
+#   sudo cp imagepress-frontend.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now imagepress-frontend
+
+[Unit]
+Description=ImagePress Frontend Static Server
+After=network.target
+
+[Service]
+Type=exec
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/imagepress/frontend/dist
+
+ExecStart=/usr/bin/python3 -m http.server 3000
+
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=imagepress-frontend
+
+[Install]
+WantedBy=multi-user.target

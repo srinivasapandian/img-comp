@@ -1,0 +1,63 @@
+version: "3.9"
+
+services:
+
+  # ── FastAPI backend ──────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: imagepress_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - temp_data:/app/temp          # session temp files
+    environment:
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 2G                 # Pillow can use a lot for large images
+        reservations:
+          memory: 256M
+
+  # ── React frontend (Nginx) ───────────────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: imagepress_frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # ── Nginx reverse proxy (optional — use when you want SSL termination) ───────
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: imagepress_proxy
+  #   restart: unless-stopped
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./deploy/nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - ./deploy/ssl:/etc/ssl/imagepress:ro
+  #     - certbot_www:/var/www/certbot:ro
+  #   depends_on:
+  #     - backend
+  #     - frontend
+
+volumes:
+  temp_data:
+    driver: local
+  # certbot_www:
