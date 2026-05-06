@@ -1,14 +1,18 @@
 import axios from 'axios'
 
-// API base URL.
-// Set `VITE_API_URL` to your backend origin (no trailing `/api`), e.g. `https://xxx.up.railway.app`.
-// If unset, defaults to relative `/api` (works with Netlify/Docker reverse-proxy setups).
+// API base URL
+// Example:
+// VITE_API_URL=https://img-comp-production.up.railway.app
+
 const apiOrigin = import.meta.env.VITE_API_URL
+
 const BASE = apiOrigin
-  ? `${apiOrigin.replace(/\/$/, '')}/api`
+  ? apiOrigin.replace(/\/$/, '') + '/api'
   : '/api'
 
-// ─── Compress ─────────────────────────────────────────────────────────────────
+console.log('API BASE:', BASE)
+
+// ─── Compress ────────────────────────────────────────────────────────────────
 
 export const startCompression = async (
   files,
@@ -18,21 +22,34 @@ export const startCompression = async (
 
   const form = new FormData()
 
-  files.forEach((f) => form.append('files', f))
+  files.forEach((file) => {
+    form.append('files', file)
+  })
 
-  form.append('quality', String(settings.quality))
-  form.append('lossless', settings.lossless ? 'true' : 'false')
-  form.append('paths', JSON.stringify(relativePaths))
+  form.append(
+    'quality',
+    String(settings.quality)
+  )
 
-  const { data } = await axios.post(
+  form.append(
+    'lossless',
+    settings.lossless ? 'true' : 'false'
+  )
+
+  form.append(
+    'paths',
+    JSON.stringify(relativePaths)
+  )
+
+  const response = await axios.post(
     `${BASE}/compress`,
     form
   )
 
-  return data
+  return response.data
 }
 
-// ─── Convert to WEBP ──────────────────────────────────────────────────────────
+// ─── Convert to WEBP ─────────────────────────────────────────────────────────
 
 export const startConversion = async (
   files,
@@ -42,21 +59,34 @@ export const startConversion = async (
 
   const form = new FormData()
 
-  files.forEach((f) => form.append('files', f))
+  files.forEach((file) => {
+    form.append('files', file)
+  })
 
-  form.append('quality', String(settings.quality))
-  form.append('lossless', settings.lossless ? 'true' : 'false')
-  form.append('paths', JSON.stringify(relativePaths))
+  form.append(
+    'quality',
+    String(settings.quality)
+  )
 
-  const { data } = await axios.post(
+  form.append(
+    'lossless',
+    settings.lossless ? 'true' : 'false'
+  )
+
+  form.append(
+    'paths',
+    JSON.stringify(relativePaths)
+  )
+
+  const response = await axios.post(
     `${BASE}/convert`,
     form
   )
 
-  return data
+  return response.data
 }
 
-// ─── SSE Progress ─────────────────────────────────────────────────────────────
+// ─── SSE Progress ────────────────────────────────────────────────────────────
 
 export const subscribeProgress = (
   sessionId,
@@ -65,62 +95,60 @@ export const subscribeProgress = (
   onError
 ) => {
 
-  const eventUrl =
+  const sseUrl =
     `${BASE}/progress/${sessionId}`
 
-  const es = new EventSource(eventUrl)
+  console.log('SSE URL:', sseUrl)
 
-  let intentionalClose = false
+  const es = new EventSource(sseUrl)
 
-  es.onmessage = ({ data }) => {
+  let closedManually = false
+
+  es.onmessage = (event) => {
 
     try {
 
-      const parsed = JSON.parse(data)
+      const parsed =
+        JSON.parse(event.data)
 
       onData(parsed)
 
       if (
-        ['completed', 'failed', 'cancelled']
-          .includes(parsed.status)
+        [
+          'completed',
+          'failed',
+          'cancelled'
+        ].includes(parsed.status)
       ) {
 
-        intentionalClose = true
+        closedManually = true
 
         es.close()
 
         onDone(parsed)
       }
 
-    } catch (e) {
-
-      onError(e)
-    }
-  }
-
-  es.onerror = async () => {
-
-    if (intentionalClose) return
-
-    try {
-
-      const res = await fetch(eventUrl)
-
-      console.error(
-        'SSE endpoint error:',
-        res.status,
-        res.headers.get('content-type')
-      )
-
     } catch (err) {
 
       console.error(
-        'SSE fetch failed:',
+        'SSE parse error:',
         err
       )
-    }
 
-    intentionalClose = true
+      onError(err)
+    }
+  }
+
+  es.onerror = (err) => {
+
+    if (closedManually) return
+
+    console.error(
+      'SSE connection error:',
+      err
+    )
+
+    closedManually = true
 
     es.close()
 
@@ -131,20 +159,20 @@ export const subscribeProgress = (
 
   return () => {
 
-    intentionalClose = true
+    closedManually = true
 
     es.close()
   }
 }
 
-// ─── Download ZIP ─────────────────────────────────────────────────────────────
+// ─── Download ZIP ────────────────────────────────────────────────────────────
 
 export const downloadZip = async (
   sessionId,
   filename = 'imagepress'
 ) => {
 
-  const res = await axios.get(
+  const response = await axios.get(
     `${BASE}/download/${sessionId}`,
     {
       responseType: 'blob',
@@ -152,29 +180,28 @@ export const downloadZip = async (
   )
 
   const url =
-    URL.createObjectURL(res.data)
+    URL.createObjectURL(response.data)
 
-  const a =
+  const link =
     document.createElement('a')
 
-  a.href = url
+  link.href = url
 
-  a.download =
+  link.download =
     `${filename}_${sessionId.slice(0, 8)}.zip`
 
-  document.body.appendChild(a)
+  document.body.appendChild(link)
 
-  a.click()
+  link.click()
 
-  document.body.removeChild(a)
+  document.body.removeChild(link)
 
-  setTimeout(
-    () => URL.revokeObjectURL(url),
-    2000
-  )
+  setTimeout(() => {
+    URL.revokeObjectURL(url)
+  }, 2000)
 }
 
-// ─── Cancel Session ───────────────────────────────────────────────────────────
+// ─── Cancel Session ──────────────────────────────────────────────────────────
 
 export const cancelSession = async (
   sessionId
