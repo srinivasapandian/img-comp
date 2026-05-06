@@ -1,4 +1,5 @@
 import asyncio
+import os
 import json
 import shutil
 import uuid
@@ -14,10 +15,17 @@ from conversion import convert_to_webp_task
 
 app = FastAPI(title="ImagePress API", version="2.0.0")
 
+cors_origins_env = os.getenv("CORS_ORIGINS", "*").strip()
+cors_origins = (
+    ["*"]
+    if cors_origins_env in {"*", ""}
+    else [o.strip() for o in cors_origins_env.split(",") if o.strip()]
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=cors_origins,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
